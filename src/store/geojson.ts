@@ -4,6 +4,10 @@ import type {
   GeoJsonProperties,
   Geometry,
 } from 'geojson'
+import {
+  parseCoordSys,
+  type CoordSysId,
+} from '../data/coordSystems'
 
 export type EditorFeature = Omit<
   Feature<Geometry, GeoJsonProperties>,
@@ -17,6 +21,8 @@ export type EditorFeatureCollection = Omit<
   'features'
 > & {
   features: EditorFeature[]
+  /** 扩展字段：标注数据坐标系，便于其他项目正确叠加 */
+  coordSys?: CoordSysId
 }
 
 export type ParseResult =
@@ -123,12 +129,15 @@ export function validateGeoJson(value: unknown): ParseResult {
     })
   }
 
+  const coordSys = parseCoordSys(value.coordSys) ?? undefined
+
   return {
     ok: true,
     data: {
       ...(value as unknown as FeatureCollection<Geometry, GeoJsonProperties>),
       type: 'FeatureCollection',
       features,
+      ...(coordSys ? { coordSys } : {}),
     },
   }
 }
@@ -142,8 +151,15 @@ export function parseGeoJsonText(text: string): ParseResult {
   }
 }
 
-export function stringifyGeoJson(data: EditorFeatureCollection): string {
-  return JSON.stringify(data, null, 2)
+export function stringifyGeoJson(
+  data: EditorFeatureCollection,
+  options: { coordSys?: CoordSysId } = {},
+): string {
+  const payload: EditorFeatureCollection = { ...data }
+  const coordSys = options.coordSys ?? data.coordSys
+  if (coordSys) payload.coordSys = coordSys
+  else delete payload.coordSys
+  return JSON.stringify(payload, null, 2)
 }
 
 export function parsePropertyValue(value: string): unknown {

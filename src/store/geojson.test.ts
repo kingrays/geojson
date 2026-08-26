@@ -5,6 +5,7 @@ import {
   parseGeoJsonText,
   parsePropertyValue,
   removeFeature,
+  stringifyGeoJson,
   updateFeatureProperties,
 } from './geojson'
 
@@ -32,6 +33,20 @@ describe('GeoJSON 解析与校验', () => {
 
     expect(result.ok).toBe(true)
     if (result.ok) expect(result.data.features[0].id).toBe('7')
+  })
+
+  it('解析 coordSys 扩展字段并在导出时写入', () => {
+    const parsed = parseGeoJsonText(`{
+      "type": "FeatureCollection",
+      "coordSys": "GCJ-02",
+      "features": []
+    }`)
+    expect(parsed.ok).toBe(true)
+    if (!parsed.ok) return
+    expect(parsed.data.coordSys).toBe('GCJ-02')
+
+    const exported = stringifyGeoJson(parsed.data, { coordSys: 'GCJ-02' })
+    expect(JSON.parse(exported).coordSys).toBe('GCJ-02')
   })
 
   it('拒绝错误的根类型和几何结构', () => {

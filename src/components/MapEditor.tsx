@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 import {
   GeoJSON,
   MapContainer,
@@ -14,10 +14,19 @@ import L, {
 import '@geoman-io/leaflet-geoman-free'
 import { LocateFixed } from 'lucide-react'
 import type { Feature, GeoJsonProperties, Geometry } from 'geojson'
+import { getBasemap, isDomesticBasemap } from '../data/basemaps'
+import type { CoordSysId, TargetPlatform } from '../data/coordSystems'
+import { getTargetPlatform } from '../data/coordSystems'
 import type {
   EditorFeature,
   EditorFeatureCollection,
 } from '../store/geojson'
+import { transformCollection, transformFeature } from '../store/coordinates'
+import { getMapKey } from '../store/mapKeys'
+import { getMapCrs } from '../map/chinaMapSetup'
+import { BasemapSwitcher } from './BasemapSwitcher'
+import { ChinaTileLayers } from './ChinaTileLayers'
+import { TargetPlatformSwitcher } from './TargetPlatformSwitcher'
 
 type EditableLayer = Layer & {
   feature?: EditorFeature
@@ -33,6 +42,13 @@ interface MapEditorProps {
   revision: number
   fitRequest: number
   selectedId: string | null
+  dataCrs: CoordSysId
+  basemapId: string
+  targetPlatform: TargetPlatform
+  onBasemapChange: (basemapId: string) => void
+  onManageKeys: () => void
+  onTargetPlatformChange: (platform: TargetPlatform) => void
+  onSuggestTargetPlatform: () => void
   onFit: () => void
   onSelect: (id: string | null) => void
   onCreate: (feature: Feature<Geometry, GeoJsonProperties>) => void
@@ -46,7 +62,10 @@ interface MapEditorProps {
 function FitController({
   data,
   fitRequest,
-}: Pick<MapEditorProps, 'data' | 'fitRequest'>) {
+}: {
+  data: EditorFeatureCollection
+  fitRequest: number
+}) {
   const map = useMap()
   const dataRef = useRef(data)
 
@@ -67,11 +86,24 @@ function FitController({
 }
 
 function DrawingController({
+  basemapId,
+  basemapCrs,
+  dataCrs,
   onCreate,
   onEdit,
   onRemove,
-}: Pick<MapEditorProps, 'onCreate' | 'onEdit' | 'onRemove'>) {
+  onSuggestTargetPlatform,
+}: {
+  basemapId: string
+  basemapCrs: CoordSysId
+  dataCrs: CoordSysId
+  onCreate: MapEditorProps['onCreate']
+  onEdit: MapEditorProps['onEdit']
+  onRemove: MapEditorProps['onRemove']
+  onSuggestTargetPlatform: () => void
+}) {
   const map = useMap()
+  const hasSuggestedRef = useRef(false)
 
   useEffect(() => {
     map.pm.setLang('zh')
@@ -92,18 +124,28 @@ function DrawingController({
     })
 
     const handleCreate = (event: GeomanLayerEvent) => {
+      if (
+        !hasSuggestedRef.current &&
+        isDomesticBasemap(basemapId) &&
+        dataCrs === 'WGS84'
+      ) {
+        hasSuggestedRef.current = true
+        onSuggestTargetPlatform()
+      }
+
       const feature = event.layer.toGeoJSON?.()
       if (!feature) return
 
-      // 新建图层交给 React 状态重新渲染，避免 Leaflet 内部保留重复图层。
       event.layer.remove()
-      onCreate(feature)
+      onCreate(transformFeature(feature, basemapCrs, dataCrs))
     }
 
     const handleEdit = (event: GeomanLayerEvent) => {
       const id = event.layer.feature?.id
       const feature = event.layer.toGeoJSON?.()
-      if (id && feature) onEdit(String(id), feature)
+      if (id && feature) {
+        onEdit(String(id), transformFeature(feature, basemapCrs, dataCrs))
+      }
     }
 
     const handleRemove = (event: GeomanLayerEvent) => {
@@ -121,7 +163,16 @@ function DrawingController({
       map.off('pm:remove', handleRemove)
       map.pm.removeControls()
     }
-  }, [map, onCreate, onEdit, onRemove])
+  }, [
+    map,
+    basemapId,
+    basemapCrs,
+    dataCrs,
+    onCreate,
+    onEdit,
+    onRemove,
+    onSuggestTargetPlatform,
+  ])
 
   return null
 }
@@ -147,18 +198,53 @@ function RecenterButton({ onClick }: { onClick: () => void }) {
   )
 }
 
+function getMapHint(
+  dataCrs: CoordSysId,
+  basemapCrs: CoordSysId,
+  basemapLabel: string,
+  targetLabel: string,
+): string {
+  if (dataCrs !== basemapCrs) {
+    return `当前按 ${basemapLabel} 预览，导出仍为 ${targetLabel} 坐标`
+  }
+  return '使用右侧工具绘制、拖动、编辑或删除要素'
+}
+
 export function MapEditor(props: MapEditorProps) {
   const {
     data,
     revision,
     fitRequest,
     selectedId,
+    dataCrs,
+    basemapId,
+    targetPlatform,
+    onBasemapChange,
+    onManageKeys,
+    onTargetPlatformChange,
+    onSuggestTargetPlatform,
     onFit,
     onSelect,
     onCreate,
     onEdit,
     onRemove,
   } = props
+
+  const basemap = getBasemap(basemapId)
+  const basemapCrs = basemap.basemapCrs
+  const target = getTargetPlatform(targetPlatform)
+
+  const displayData = useMemo(
+    () =>
+      dataCrs === basemapCrs
+        ? data
+        : transformCollection(data, dataCrs, basemapCrs),
+    [data, dataCrs, basemapCrs],
+  )
+
+  const chinaKey = basemap.keyProvider
+    ? getMapKey(basemap.keyProvider) ?? ''
+    : ''
 
   const featureStyle = (feature?: Feature): PathOptions => ({
     color: String(feature?.id) === selectedId ? '#0f766e' : '#475569',
@@ -167,22 +253,42 @@ export function MapEditor(props: MapEditorProps) {
     fillOpacity: String(feature?.id) === selectedId ? 0.6 : 0.52,
   })
 
+  const mapHint = getMapHint(
+    dataCrs,
+    basemapCrs,
+    basemap.label,
+    target.label,
+  )
+
   return (
     <section className="map-pane" aria-label="GeoJSON 地图">
       <MapContainer
+        key={basemapCrs}
+        crs={getMapCrs(basemapCrs)}
         center={[31.236, 121.482]}
         zoom={15}
         minZoom={2}
         className="map"
         zoomControl
       >
-        <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-        />
+        {basemap.url ? (
+          <TileLayer
+            attribution={basemap.attribution ?? ''}
+            url={basemap.url}
+          />
+        ) : (
+          basemap.layers &&
+          chinaKey && (
+            <ChinaTileLayers
+              key={`${basemapId}-${chinaKey}`}
+              layers={basemap.layers}
+              apiKey={chinaKey}
+            />
+          )
+        )}
         <GeoJSON
           key={revision}
-          data={data}
+          data={displayData}
           style={featureStyle}
           pointToLayer={(feature, latlng) =>
             L.circleMarker(latlng, {
@@ -199,18 +305,32 @@ export function MapEditor(props: MapEditorProps) {
             if (name) layer.bindTooltip(String(name))
           }}
         />
-        <FitController data={data} fitRequest={fitRequest} />
+        <FitController data={displayData} fitRequest={fitRequest} />
         <DrawingController
+          basemapId={basemapId}
+          basemapCrs={basemapCrs}
+          dataCrs={dataCrs}
           onCreate={onCreate}
           onEdit={onEdit}
           onRemove={onRemove}
+          onSuggestTargetPlatform={onSuggestTargetPlatform}
         />
         <ClearSelection onSelect={onSelect} />
       </MapContainer>
       <RecenterButton onClick={onFit} />
-      <div className="map-hint">
-        使用右侧工具绘制、拖动、编辑或删除要素
+      <div className="map-controls">
+        <TargetPlatformSwitcher
+          value={targetPlatform}
+          onChange={onTargetPlatformChange}
+        />
+        <BasemapSwitcher
+          value={basemapId}
+          targetPlatform={targetPlatform}
+          onChange={onBasemapChange}
+          onManageKeys={onManageKeys}
+        />
       </div>
+      <div className="map-hint">{mapHint}</div>
     </section>
   )
 }
