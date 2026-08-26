@@ -11,3 +11,8 @@ export function getMapCrs(basemapCrs: CoordSysId): L.CRS {
   }
   return L.CRS.EPSG3857
 }
+
+/** MapContainer remount 键：WGS84 / GCJ-02 共用 EPSG3857，切换时不重建地图 */
+export function getMapCrsKey(basemapCrs: CoordSysId): string {
+  return basemapCrs === 'BD-09' ? 'BD-09' : 'EPSG3857'
+}

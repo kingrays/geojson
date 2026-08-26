@@ -31,7 +31,8 @@ export const BASEMAPS: BasemapDefinition[] = [
   {
     id: 'tianditu-normal',
     label: '天地图 · 矢量',
-    basemapCrs: 'GCJ-02',
+    // 天地图 _w 瓦片为 Web 墨卡托 + CGCS2000，与 WGS84 等价用于预览
+    basemapCrs: 'WGS84',
     platforms: ['gcj'],
     keyProvider: 'tianditu',
     keyApplyUrl: 'https://lbs.tianditu.gov.cn/',
@@ -40,7 +41,7 @@ export const BASEMAPS: BasemapDefinition[] = [
   {
     id: 'tianditu-satellite',
     label: '天地图 · 影像',
-    basemapCrs: 'GCJ-02',
+    basemapCrs: 'WGS84',
     platforms: ['gcj'],
     keyProvider: 'tianditu',
     keyApplyUrl: 'https://lbs.tianditu.gov.cn/',

@@ -23,7 +23,7 @@ import type {
 } from '../store/geojson'
 import { transformCollection, transformFeature } from '../store/coordinates'
 import { getMapKey } from '../store/mapKeys'
-import { getMapCrs } from '../map/chinaMapSetup'
+import { getMapCrs, getMapCrsKey } from '../map/chinaMapSetup'
 import { BasemapSwitcher } from './BasemapSwitcher'
 import { ChinaTileLayers } from './ChinaTileLayers'
 import { TargetPlatformSwitcher } from './TargetPlatformSwitcher'
@@ -263,7 +263,7 @@ export function MapEditor(props: MapEditorProps) {
   return (
     <section className="map-pane" aria-label="GeoJSON 地图">
       <MapContainer
-        key={basemapCrs}
+        key={getMapCrsKey(basemapCrs)}
         crs={getMapCrs(basemapCrs)}
         center={[31.236, 121.482]}
         zoom={15}
