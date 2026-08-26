@@ -3,10 +3,11 @@ import { Braces, Table2, X } from 'lucide-react'
 import type { Feature, GeoJsonProperties, Geometry } from 'geojson'
 import { AppHeader } from './components/AppHeader'
 import { ConfirmDialog, ManageKeysDialog, MapKeyDialog } from './components/MapKeyDialog'
-import { getBasemap, isBasemapAllowedForPlatform, isDomesticBasemap, type MapKeyProvider } from './data/basemaps'
+import { getBasemap, getPreferredExportTarget, shouldSuggestExportTarget, type MapKeyProvider } from './data/basemaps'
 import {
   coordSysToTargetPlatform,
   getTargetPlatform,
+  parseTargetPlatform,
   type TargetPlatform,
 } from './data/coordSystems'
 import { sampleGeoJson } from './data/sampleGeojson'
@@ -60,10 +61,7 @@ interface StoredDraft {
 
 function getInitialDocument(): StoredDraft & { targetPlatform: TargetPlatform; basemapId: string } {
   const targetPlatform = getSavedTargetPlatform()
-  let basemapId = getSavedBasemapId()
-  if (!isBasemapAllowedForPlatform(basemapId, targetPlatform)) {
-    basemapId = getTargetPlatform(targetPlatform).defaultBasemapId
-  }
+  const basemapId = getSavedBasemapId()
 
   const fallback = {
     data: cloneCollection(sampleGeoJson),
@@ -79,14 +77,11 @@ function getInitialDocument(): StoredDraft & { targetPlatform: TargetPlatform; b
       const result = parseGeoJsonText(JSON.stringify(draft.data))
       if (result.ok) {
         const targetPlatform =
-          draft.targetPlatform ??
+          parseTargetPlatform(draft.targetPlatform) ??
           (result.data.coordSys
             ? coordSysToTargetPlatform(result.data.coordSys)
             : getSavedTargetPlatform())
-        let basemapId = draft.basemapId ?? getSavedBasemapId()
-        if (!isBasemapAllowedForPlatform(basemapId, targetPlatform)) {
-          basemapId = getTargetPlatform(targetPlatform).defaultBasemapId
-        }
+        const basemapId = draft.basemapId ?? getSavedBasemapId()
         return {
           data: result.data,
           fileName: draft.fileName || '已恢复草稿.geojson',
@@ -126,6 +121,9 @@ function App() {
     null,
   )
   const [showPlatformSuggest, setShowPlatformSuggest] = useState(false)
+  const [suggestedPlatform, setSuggestedPlatform] = useState<TargetPlatform | null>(
+    null,
+  )
   const [showImportConvert, setShowImportConvert] = useState<{
     data: EditorFeatureCollection
     fromCoordSys: import('./data/coordSystems').CoordSysId
@@ -139,13 +137,10 @@ function App() {
 
   const dataCrs = getTargetPlatform(targetPlatform).coordSys
 
-  /** 切换底图前检测平台与 Key；缺失 Key 则弹出录入对话框 */
+  /** 切换底图前检测 Key；缺失则弹出录入对话框 */
   const tryApplyBasemap = useCallback(
     (nextBasemapId: string, options: { suggestPlatform?: boolean } = {}) => {
-      let resolvedId = nextBasemapId
-      if (!isBasemapAllowedForPlatform(resolvedId, targetPlatform)) {
-        resolvedId = getTargetPlatform(targetPlatform).defaultBasemapId
-      }
+      const resolvedId = nextBasemapId
 
       if (resolvedId === basemapId) return true
 
@@ -163,9 +158,9 @@ function App() {
       setSavedBasemapId(resolvedId)
       if (
         options.suggestPlatform !== false &&
-        isDomesticBasemap(resolvedId) &&
-        targetPlatform === 'international'
+        shouldSuggestExportTarget(resolvedId, targetPlatform)
       ) {
+        setSuggestedPlatform(getPreferredExportTarget(resolvedId))
         setShowPlatformSuggest(true)
       }
       return true
@@ -208,7 +203,11 @@ function App() {
       setSavedTargetPlatform(nextPlatform)
       commitCollection(transformed, { coordSys: next.coordSys })
       tryApplyBasemap(next.defaultBasemapId, { suggestPlatform: false })
-      setNotice(`已切换用途平台为 ${next.label}`)
+      setNotice(
+        current.coordSys === next.coordSys
+          ? `已切换导出目标为 ${next.label}，坐标系相同，无需转换`
+          : `已切换导出目标为 ${next.label}`,
+      )
     },
     [commitCollection, targetPlatform, tryApplyBasemap],
   )
@@ -236,15 +235,6 @@ function App() {
     return () => window.clearTimeout(timeout)
   }, [notice])
 
-  // 用途平台变化后，确保当前底图在允许列表内
-  useEffect(() => {
-    if (!isBasemapAllowedForPlatform(basemapId, targetPlatform)) {
-      tryApplyBasemap(getTargetPlatform(targetPlatform).defaultBasemapId, {
-        suggestPlatform: false,
-      })
-    }
-  }, [basemapId, targetPlatform, tryApplyBasemap])
-
   // 恢复草稿时，若国内底图 Key 缺失则主动提示录入（仅检查初始底图）
   useEffect(() => {
     const basemap = getBasemap(initialDocument.basemapId)
@@ -259,8 +249,14 @@ function App() {
 
   const handleTargetPlatformChange = useCallback((nextPlatform: TargetPlatform) => {
     if (nextPlatform === targetPlatform) return
+    const current = getTargetPlatform(targetPlatform)
+    const next = getTargetPlatform(nextPlatform)
+    if (current.coordSys === next.coordSys) {
+      applyTargetPlatform(nextPlatform, data)
+      return
+    }
     setPendingPlatform(nextPlatform)
-  }, [targetPlatform])
+  }, [applyTargetPlatform, data, targetPlatform])
 
   const handleBasemapChange = useCallback(
     (nextBasemapId: string) => {
@@ -397,7 +393,7 @@ function App() {
         })
         setNotice(
           result.data.coordSys
-            ? `已打开 ${file.name}，坐标系与当前用途平台不一致`
+            ? `已打开 ${file.name}，坐标系与当前导出目标不一致`
             : `已打开 ${file.name}，文件未标注坐标系，已按 WGS84 处理`,
         )
         return
@@ -431,6 +427,9 @@ function App() {
   const pendingPlatformDef = pendingPlatform
     ? getTargetPlatform(pendingPlatform)
     : null
+  const suggestedPlatformDef = suggestedPlatform
+    ? getTargetPlatform(suggestedPlatform)
+    : null
 
   return (
     <div className="app-shell">
@@ -460,7 +459,10 @@ function App() {
             onBasemapChange={handleBasemapChange}
             onManageKeys={() => setShowManageKeys(true)}
             onTargetPlatformChange={handleTargetPlatformChange}
-            onSuggestTargetPlatform={() => setShowPlatformSuggest(true)}
+            onSuggestTargetPlatform={() => {
+              setSuggestedPlatform(getPreferredExportTarget(basemapId))
+              setShowPlatformSuggest(true)
+            }}
             onFit={() => setFitRequest((value) => value + 1)}
             onSelect={setSelectedId}
             onCreate={handleCreate}
@@ -544,7 +546,7 @@ function App() {
 
       {pendingPlatformDef && (
         <ConfirmDialog
-          title="切换用途平台"
+          title="切换导出目标"
           message={pendingPlatformDef.confirmMessage}
           confirmLabel="确认转换"
           onConfirm={() => {
@@ -555,23 +557,27 @@ function App() {
         />
       )}
 
-      {showPlatformSuggest && (
+      {showPlatformSuggest && suggestedPlatformDef && (
         <ConfirmDialog
-          title="建议切换用途平台"
-          message="当前使用的是国内底图，但数据坐标系仍为国际标准 (WGS84)。切换到「天地图 / 高德」可确保导出数据叠加国内地图时不偏移。"
-          confirmLabel="切换为天地图 / 高德"
+          title="建议切换导出目标"
+          message={`当前底图更适合导出给「${suggestedPlatformDef.label}」。是否转换坐标并切换导出目标？`}
+          confirmLabel={`切换为${suggestedPlatformDef.label}`}
           onConfirm={() => {
-            applyTargetPlatform('gcj', data)
+            applyTargetPlatform(suggestedPlatformDef.id, data)
             setShowPlatformSuggest(false)
+            setSuggestedPlatform(null)
           }}
-          onCancel={() => setShowPlatformSuggest(false)}
+          onCancel={() => {
+            setShowPlatformSuggest(false)
+            setSuggestedPlatform(null)
+          }}
         />
       )}
 
       {showImportConvert && (
         <ConfirmDialog
           title="转换坐标系"
-          message={`文件坐标系为 ${showImportConvert.fromCoordSys}，当前用途平台为 ${getTargetPlatform(targetPlatform).label}（${dataCrs}）。是否将坐标转换为当前用途平台坐标系？`}
+          message={`文件坐标系与当前「导出给 ${getTargetPlatform(targetPlatform).label}」不一致。是否转换为该目标可直接使用的坐标？`}
           confirmLabel="转换并加载"
           cancelLabel="按原始坐标系加载"
           onConfirm={() => {
@@ -586,7 +592,10 @@ function App() {
           }}
           onCancel={() => {
             const imported = showImportConvert.data
-            const platform = coordSysToTargetPlatform(showImportConvert.fromCoordSys)
+            const platform = coordSysToTargetPlatform(
+              showImportConvert.fromCoordSys,
+              targetPlatform,
+            )
             setTargetPlatform(platform)
             setSavedTargetPlatform(platform)
             commitCollection(imported, {
@@ -605,10 +614,15 @@ function App() {
           applyUrl={mapKeyDialog.applyUrl}
           onSave={(key) => {
             setMapKey(mapKeyDialog.provider, key)
-            setBasemapId(mapKeyDialog.pendingBasemapId)
-            setSavedBasemapId(mapKeyDialog.pendingBasemapId)
+            const nextId = mapKeyDialog.pendingBasemapId
+            setBasemapId(nextId)
+            setSavedBasemapId(nextId)
             setMapKeyDialog(null)
             setNotice('API Key 已保存，底图已切换')
+            if (shouldSuggestExportTarget(nextId, targetPlatform)) {
+              setSuggestedPlatform(getPreferredExportTarget(nextId))
+              setShowPlatformSuggest(true)
+            }
           }}
           onCancel={() => {
             const pendingId = mapKeyDialog.pendingBasemapId
@@ -627,10 +641,7 @@ function App() {
       )}
 
       {showManageKeys && (
-        <ManageKeysDialog
-          targetPlatform={targetPlatform}
-          onClose={() => setShowManageKeys(false)}
-        />
+        <ManageKeysDialog onClose={() => setShowManageKeys(false)} />
       )}
     </div>
   )

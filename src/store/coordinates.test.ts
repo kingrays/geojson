@@ -74,4 +74,10 @@ describe('mapKeys 存储', () => {
     setMapKey('gaode', '   ')
     expect(hasMapKey('gaode')).toBe(false)
   })
+
+  it('将旧版 gcj 导出目标迁移为 gaode', async () => {
+    storage.set('geojson-studio-target-platform-v1', 'gcj')
+    const { getSavedTargetPlatform } = await import('./mapKeys')
+    expect(getSavedTargetPlatform()).toBe('gaode')
+  })
 })

@@ -2,11 +2,10 @@ import { type ReactNode, useEffect, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { ExternalLink } from 'lucide-react'
 import {
+  ALL_KEY_PROVIDERS,
   MAP_KEY_PROVIDER_LABELS,
-  getKeyProvidersForPlatform,
   type MapKeyProvider,
 } from '../data/basemaps'
-import type { TargetPlatform } from '../data/coordSystems'
 import {
   clearMapKey,
   getMapKey,
@@ -147,16 +146,12 @@ export function ConfirmDialog({
 }
 
 interface ManageKeysDialogProps {
-  targetPlatform: TargetPlatform
   onClose: () => void
 }
 
 /** 管理已保存的国内地图 API Key */
-export function ManageKeysDialog({
-  targetPlatform,
-  onClose,
-}: ManageKeysDialogProps) {
-  const providers = getKeyProvidersForPlatform(targetPlatform)
+export function ManageKeysDialog({ onClose }: ManageKeysDialogProps) {
+  const providers = ALL_KEY_PROVIDERS
   const inputRefs = useRef<Partial<Record<MapKeyProvider, HTMLInputElement | null>>>({})
 
   const save = () => {

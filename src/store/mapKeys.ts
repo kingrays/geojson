@@ -1,4 +1,7 @@
-import type { TargetPlatform } from '../data/coordSystems'
+import {
+  parseTargetPlatform,
+  type TargetPlatform,
+} from '../data/coordSystems'
 import type { MapKeyProvider } from '../data/basemaps'
 import { DEFAULT_BASEMAP_ID } from '../data/basemaps'
 
@@ -58,10 +61,10 @@ export function setSavedBasemapId(basemapId: string): void {
 
 export function getSavedTargetPlatform(): TargetPlatform {
   try {
-    const value = localStorage.getItem(TARGET_PLATFORM_STORAGE)
-    if (value === 'gcj' || value === 'baidu' || value === 'international') {
-      return value
-    }
+    const parsed = parseTargetPlatform(
+      localStorage.getItem(TARGET_PLATFORM_STORAGE),
+    )
+    if (parsed) return parsed
   } catch {
     // 隐私模式或存储不可用时使用默认值。
   }

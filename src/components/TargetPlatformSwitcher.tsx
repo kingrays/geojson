@@ -11,11 +11,11 @@ export function TargetPlatformSwitcher({
 }: TargetPlatformSwitcherProps) {
   return (
     <label className="map-control">
-      <span className="map-control-label">用途平台</span>
+      <span className="map-control-label">导出给</span>
       <select
         className="map-control-select"
         value={value}
-        aria-label="用途平台"
+        aria-label="导出给"
         onChange={(event) => onChange(event.target.value as TargetPlatform)}
       >
         {TARGET_PLATFORMS.map((platform) => (

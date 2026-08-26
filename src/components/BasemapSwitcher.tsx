@@ -1,20 +1,17 @@
-import { getBasemapsForPlatform } from '../data/basemaps'
-import type { TargetPlatform } from '../data/coordSystems'
+import { getAllBasemaps } from '../data/basemaps'
 
 interface BasemapSwitcherProps {
   value: string
-  targetPlatform: TargetPlatform
   onChange: (basemapId: string) => void
   onManageKeys: () => void
 }
 
 export function BasemapSwitcher({
   value,
-  targetPlatform,
   onChange,
   onManageKeys,
 }: BasemapSwitcherProps) {
-  const basemaps = getBasemapsForPlatform(targetPlatform)
+  const basemaps = getAllBasemaps()
 
   return (
     <>
@@ -33,11 +30,9 @@ export function BasemapSwitcher({
           ))}
         </select>
       </label>
-      {targetPlatform !== 'international' && (
-        <button type="button" className="map-manage-keys" onClick={onManageKeys}>
-          管理 Key
-        </button>
-      )}
+      <button type="button" className="map-manage-keys" onClick={onManageKeys}>
+        管理 Key
+      </button>
     </>
   )
 }

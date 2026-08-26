@@ -14,7 +14,7 @@ import L, {
 import '@geoman-io/leaflet-geoman-free'
 import { LocateFixed } from 'lucide-react'
 import type { Feature, GeoJsonProperties, Geometry } from 'geojson'
-import { getBasemap, isDomesticBasemap } from '../data/basemaps'
+import { getBasemap, shouldSuggestExportTarget } from '../data/basemaps'
 import type { CoordSysId, TargetPlatform } from '../data/coordSystems'
 import { getTargetPlatform } from '../data/coordSystems'
 import type {
@@ -89,6 +89,7 @@ function DrawingController({
   basemapId,
   basemapCrs,
   dataCrs,
+  targetPlatform,
   onCreate,
   onEdit,
   onRemove,
@@ -97,6 +98,7 @@ function DrawingController({
   basemapId: string
   basemapCrs: CoordSysId
   dataCrs: CoordSysId
+  targetPlatform: TargetPlatform
   onCreate: MapEditorProps['onCreate']
   onEdit: MapEditorProps['onEdit']
   onRemove: MapEditorProps['onRemove']
@@ -126,8 +128,7 @@ function DrawingController({
     const handleCreate = (event: GeomanLayerEvent) => {
       if (
         !hasSuggestedRef.current &&
-        isDomesticBasemap(basemapId) &&
-        dataCrs === 'WGS84'
+        shouldSuggestExportTarget(basemapId, targetPlatform)
       ) {
         hasSuggestedRef.current = true
         onSuggestTargetPlatform()
@@ -168,6 +169,7 @@ function DrawingController({
     basemapId,
     basemapCrs,
     dataCrs,
+    targetPlatform,
     onCreate,
     onEdit,
     onRemove,
@@ -287,7 +289,7 @@ export function MapEditor(props: MapEditorProps) {
           )
         )}
         <GeoJSON
-          key={revision}
+          key={`${revision}-${basemapCrs}-${basemapId}`}
           data={displayData}
           style={featureStyle}
           pointToLayer={(feature, latlng) =>
@@ -310,6 +312,7 @@ export function MapEditor(props: MapEditorProps) {
           basemapId={basemapId}
           basemapCrs={basemapCrs}
           dataCrs={dataCrs}
+          targetPlatform={targetPlatform}
           onCreate={onCreate}
           onEdit={onEdit}
           onRemove={onRemove}
@@ -325,7 +328,6 @@ export function MapEditor(props: MapEditorProps) {
         />
         <BasemapSwitcher
           value={basemapId}
-          targetPlatform={targetPlatform}
           onChange={onBasemapChange}
           onManageKeys={onManageKeys}
         />

@@ -1,7 +1,7 @@
 import gcoord from 'gcoord'
 
-/** 用途平台：决定数据存储与导出的坐标系 */
-export type TargetPlatform = 'gcj' | 'baidu' | 'international'
+/** 导出目标：界面用产品名，内部决定存储与导出的坐标系 */
+export type TargetPlatform = 'gaode' | 'baidu' | 'tianditu' | 'international'
 
 /** 数据/底图坐标系标识 */
 export type CoordSysId = 'WGS84' | 'GCJ-02' | 'BD-09'
@@ -17,31 +17,40 @@ export interface TargetPlatformDefinition {
 
 export const TARGET_PLATFORMS: TargetPlatformDefinition[] = [
   {
-    id: 'gcj',
-    label: '天地图 / 高德',
+    id: 'gaode',
+    label: '高德',
     coordSys: 'GCJ-02',
-    statusLabel: '天地图/高德坐标 · GCJ-02',
-    defaultBasemapId: 'tianditu-normal',
+    statusLabel: '导出给高德',
+    defaultBasemapId: 'gaode-normal',
     confirmMessage:
-      '将把全部要素坐标转换为天地图/高德坐标（GCJ-02），导出后可直接叠加到对应地图。是否继续？',
+      '将把全部要素转换成高德可直接叠加的坐标。是否继续？',
   },
   {
     id: 'baidu',
     label: '百度',
     coordSys: 'BD-09',
-    statusLabel: '百度坐标 · BD-09',
+    statusLabel: '导出给百度',
     defaultBasemapId: 'baidu-normal',
     confirmMessage:
-      '将把全部要素坐标转换为百度坐标（BD-09），导出后可直接叠加到百度地图。是否继续？',
+      '将把全部要素转换成百度可直接叠加的坐标。是否继续？',
+  },
+  {
+    id: 'tianditu',
+    label: '天地图',
+    coordSys: 'WGS84',
+    statusLabel: '导出给天地图',
+    defaultBasemapId: 'tianditu-normal',
+    confirmMessage:
+      '将把全部要素转换成天地图可直接叠加的坐标。是否继续？',
   },
   {
     id: 'international',
     label: '国际标准',
     coordSys: 'WGS84',
-    statusLabel: 'WGS 84 · EPSG:4326',
+    statusLabel: '导出给国际标准',
     defaultBasemapId: 'osm',
     confirmMessage:
-      '将把全部要素坐标转换为国际标准坐标（WGS84），导出后可用于 OSM 等国际地图。是否继续？',
+      '将把全部要素转换成国际标准可直接叠加的坐标。是否继续？',
   },
 ]
 
@@ -49,8 +58,18 @@ export const COORD_SYS_VALUES: CoordSysId[] = ['WGS84', 'GCJ-02', 'BD-09']
 
 export function getTargetPlatform(id: TargetPlatform): TargetPlatformDefinition {
   return (
-    TARGET_PLATFORMS.find((item) => item.id === id) ?? TARGET_PLATFORMS[2]
+    TARGET_PLATFORMS.find((item) => item.id === id) ??
+    TARGET_PLATFORMS[TARGET_PLATFORMS.length - 1]
   )
+}
+
+/** 解析导出目标；旧版 gcj（天地图/高德）按 GCJ-02 迁到高德 */
+export function parseTargetPlatform(value: unknown): TargetPlatform | null {
+  if (value === 'gcj' || value === 'gaode') return 'gaode'
+  if (value === 'baidu' || value === 'tianditu' || value === 'international') {
+    return value
+  }
+  return null
 }
 
 export function coordSysToGcoord(coordSys: CoordSysId) {
@@ -73,13 +92,14 @@ export function parseCoordSys(value: unknown): CoordSysId | null {
 
 export function coordSysToTargetPlatform(
   coordSys: CoordSysId,
+  current?: TargetPlatform,
 ): TargetPlatform {
   switch (coordSys) {
     case 'GCJ-02':
-      return 'gcj'
+      return 'gaode'
     case 'BD-09':
       return 'baidu'
     default:
-      return 'international'
+      return current === 'tianditu' ? 'tianditu' : 'international'
   }
 }

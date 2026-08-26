@@ -1,14 +1,17 @@
-import type { TargetPlatform } from './coordSystems'
+import {
+  getTargetPlatform,
+  type TargetPlatform,
+} from './coordSystems'
 
 export type MapKeyProvider = 'tianditu' | 'gaode' | 'baidu'
 
 export interface BasemapDefinition {
   id: string
   label: string
-  /** 底图瓦片使用的坐标系 */
+  /** Leaflet 预览/绘制用的坐标系（与导出坐标系可以不同） */
   basemapCrs: 'WGS84' | 'GCJ-02' | 'BD-09'
-  /** 可用的用途平台 */
-  platforms: TargetPlatform[]
+  /** 该底图对应的导出目标（用于建议切换） */
+  preferredExportTarget: TargetPlatform
   /** 需要 API Key 的平台；OSM 无需 Key */
   keyProvider?: MapKeyProvider
   keyApplyUrl?: string
@@ -23,7 +26,7 @@ export const BASEMAPS: BasemapDefinition[] = [
     id: 'osm',
     label: 'OpenStreetMap',
     basemapCrs: 'WGS84',
-    platforms: ['international'],
+    preferredExportTarget: 'international',
     attribution:
       '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
     url: 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
@@ -33,7 +36,7 @@ export const BASEMAPS: BasemapDefinition[] = [
     label: '天地图 · 矢量',
     // 天地图 _w 瓦片为 Web 墨卡托 + CGCS2000，与 WGS84 等价用于预览
     basemapCrs: 'WGS84',
-    platforms: ['gcj'],
+    preferredExportTarget: 'tianditu',
     keyProvider: 'tianditu',
     keyApplyUrl: 'https://lbs.tianditu.gov.cn/',
     layers: ['TianDiTu.Normal.Map', 'TianDiTu.Normal.Annotion'],
@@ -42,7 +45,7 @@ export const BASEMAPS: BasemapDefinition[] = [
     id: 'tianditu-satellite',
     label: '天地图 · 影像',
     basemapCrs: 'WGS84',
-    platforms: ['gcj'],
+    preferredExportTarget: 'tianditu',
     keyProvider: 'tianditu',
     keyApplyUrl: 'https://lbs.tianditu.gov.cn/',
     layers: ['TianDiTu.Satellite.Map', 'TianDiTu.Satellite.Annotion'],
@@ -50,8 +53,9 @@ export const BASEMAPS: BasemapDefinition[] = [
   {
     id: 'gaode-normal',
     label: '高德 · 标准',
+    // 高德 XYZ 瓦片按 GCJ-02 经纬度套 Web 墨卡托切网，叠加层须用 GCJ-02
     basemapCrs: 'GCJ-02',
-    platforms: ['gcj'],
+    preferredExportTarget: 'gaode',
     keyProvider: 'gaode',
     keyApplyUrl: 'https://lbs.amap.com/',
     layers: ['GaoDe.Normal.Map'],
@@ -60,7 +64,7 @@ export const BASEMAPS: BasemapDefinition[] = [
     id: 'gaode-satellite',
     label: '高德 · 卫星',
     basemapCrs: 'GCJ-02',
-    platforms: ['gcj'],
+    preferredExportTarget: 'gaode',
     keyProvider: 'gaode',
     keyApplyUrl: 'https://lbs.amap.com/',
     layers: ['GaoDe.Satellite.Map', 'GaoDe.Satellite.Annotion'],
@@ -69,7 +73,7 @@ export const BASEMAPS: BasemapDefinition[] = [
     id: 'baidu-normal',
     label: '百度 · 标准',
     basemapCrs: 'BD-09',
-    platforms: ['baidu'],
+    preferredExportTarget: 'baidu',
     keyProvider: 'baidu',
     keyApplyUrl: 'https://lbsyun.baidu.com/',
     layers: ['Baidu.Normal.Map'],
@@ -78,7 +82,7 @@ export const BASEMAPS: BasemapDefinition[] = [
     id: 'baidu-satellite',
     label: '百度 · 卫星',
     basemapCrs: 'BD-09',
-    platforms: ['baidu'],
+    preferredExportTarget: 'baidu',
     keyProvider: 'baidu',
     keyApplyUrl: 'https://lbsyun.baidu.com/',
     layers: ['Baidu.Satellite.Map', 'Baidu.Satellite.Annotion'],
@@ -91,19 +95,29 @@ export function getBasemap(id: string): BasemapDefinition {
   return BASEMAPS.find((item) => item.id === id) ?? BASEMAPS[0]
 }
 
-export function getBasemapsForPlatform(platform: TargetPlatform): BasemapDefinition[] {
-  return BASEMAPS.filter((item) => item.platforms.includes(platform))
-}
-
-export function isBasemapAllowedForPlatform(
-  basemapId: string,
-  platform: TargetPlatform,
-): boolean {
-  return getBasemap(basemapId).platforms.includes(platform)
+export function getAllBasemaps(): BasemapDefinition[] {
+  return BASEMAPS
 }
 
 export function isDomesticBasemap(basemapId: string): boolean {
   return getBasemap(basemapId).keyProvider !== undefined
+}
+
+export function getPreferredExportTarget(basemapId: string): TargetPlatform {
+  return getBasemap(basemapId).preferredExportTarget
+}
+
+/** 底图对应导出目标的坐标系与当前导出目标不同时，建议切换 */
+export function shouldSuggestExportTarget(
+  basemapId: string,
+  current: TargetPlatform,
+): boolean {
+  const preferred = getPreferredExportTarget(basemapId)
+  if (preferred === current) return false
+  return (
+    getTargetPlatform(preferred).coordSys !==
+    getTargetPlatform(current).coordSys
+  )
 }
 
 export const MAP_KEY_PROVIDER_LABELS: Record<MapKeyProvider, string> = {
@@ -112,16 +126,8 @@ export const MAP_KEY_PROVIDER_LABELS: Record<MapKeyProvider, string> = {
   baidu: '百度',
 }
 
-/** 用途平台对应的 Key 提供方（用于管理 Key 弹窗过滤） */
-export function getKeyProvidersForPlatform(
-  platform: TargetPlatform,
-): MapKeyProvider[] {
-  switch (platform) {
-    case 'gcj':
-      return ['tianditu', 'gaode']
-    case 'baidu':
-      return ['baidu']
-    default:
-      return ['tianditu', 'gaode', 'baidu']
-  }
-}
+export const ALL_KEY_PROVIDERS: MapKeyProvider[] = [
+  'tianditu',
+  'gaode',
+  'baidu',
+]
