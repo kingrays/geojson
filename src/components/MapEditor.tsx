@@ -28,6 +28,17 @@ import { BasemapSwitcher } from './BasemapSwitcher'
 import { ChinaTileLayers } from './ChinaTileLayers'
 import { TargetPlatformSwitcher } from './TargetPlatformSwitcher'
 
+/** 超过瓦片原生级别后拉伸显示，便于精细绘制 */
+const MAP_MAX_ZOOM = 22
+const MAP_MIN_ZOOM = 2
+const MAP_DEFAULT_ZOOM = 16
+/** 适配全部要素时允许更近，避免小范围图形被压在 17 级 */
+const FIT_BOUNDS_MAX_ZOOM = 20
+const OSM_MAX_NATIVE_ZOOM = 19
+/** 百度 CRS 的 resolutions 只有 0–18 级，不能超过 */
+const BAIDU_MAX_ZOOM = 18
+const CHINA_MAX_NATIVE_ZOOM = 18
+
 type EditableLayer = Layer & {
   feature?: EditorFeature
   toGeoJSON?: () => Feature<Geometry, GeoJsonProperties>
@@ -78,7 +89,7 @@ function FitController({
 
     const bounds = L.geoJSON(dataRef.current).getBounds()
     if (bounds.isValid()) {
-      map.fitBounds(bounds, { padding: [48, 48], maxZoom: 17 })
+      map.fitBounds(bounds, { padding: [48, 48], maxZoom: FIT_BOUNDS_MAX_ZOOM })
     }
   }, [fitRequest, map])
 
@@ -262,14 +273,17 @@ export function MapEditor(props: MapEditorProps) {
     target.label,
   )
 
+  const mapMaxZoom = basemapCrs === 'BD-09' ? BAIDU_MAX_ZOOM : MAP_MAX_ZOOM
+
   return (
     <section className="map-pane" aria-label="GeoJSON 地图">
       <MapContainer
         key={getMapCrsKey(basemapCrs)}
         crs={getMapCrs(basemapCrs)}
         center={[31.236, 121.482]}
-        zoom={15}
-        minZoom={2}
+        zoom={MAP_DEFAULT_ZOOM}
+        minZoom={MAP_MIN_ZOOM}
+        maxZoom={mapMaxZoom}
         className="map"
         zoomControl
       >
@@ -277,6 +291,8 @@ export function MapEditor(props: MapEditorProps) {
           <TileLayer
             attribution={basemap.attribution ?? ''}
             url={basemap.url}
+            maxNativeZoom={OSM_MAX_NATIVE_ZOOM}
+            maxZoom={mapMaxZoom}
           />
         ) : (
           basemap.layers &&
@@ -285,6 +301,8 @@ export function MapEditor(props: MapEditorProps) {
               key={`${basemapId}-${chinaKey}`}
               layers={basemap.layers}
               apiKey={chinaKey}
+              maxNativeZoom={CHINA_MAX_NATIVE_ZOOM}
+              maxZoom={mapMaxZoom}
             />
           )
         )}
