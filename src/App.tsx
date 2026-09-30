@@ -11,7 +11,7 @@ import {
   type TargetPlatform,
 } from './data/coordSystems'
 import { sampleGeoJson } from './data/sampleGeojson'
-import { transformCollection } from './store/coordinates'
+import { roundCollection, transformCollection } from './store/coordinates'
 import {
   getSavedBasemapId,
   getSavedTargetPlatform,
@@ -174,7 +174,8 @@ function App() {
       options: { fit?: boolean; dirty?: boolean; coordSys?: typeof dataCrs } = {},
     ) => {
       const coordSys = options.coordSys ?? getTargetPlatform(targetPlatform).coordSys
-      const withCoordSys = { ...nextData, coordSys }
+      // 写入状态前统一小数位，保证地图编辑与导出/草稿一致
+      const withCoordSys = roundCollection({ ...nextData, coordSys })
       setData(withCoordSys)
       setText(stringifyGeoJson(withCoordSys, { coordSys }))
       setError(null)
@@ -182,7 +183,7 @@ function App() {
       setIsDirty(options.dirty ?? true)
       if (options.fit) setFitRequest((value) => value + 1)
       setSelectedId((current) =>
-        nextData.features.some((feature) => feature.id === current)
+        withCoordSys.features.some((feature) => feature.id === current)
           ? current
           : null,
       )

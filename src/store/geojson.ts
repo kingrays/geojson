@@ -8,6 +8,7 @@ import {
   parseCoordSys,
   type CoordSysId,
 } from '../data/coordSystems'
+import { roundCollection } from './coordinates'
 
 export type EditorFeature = Omit<
   Feature<Geometry, GeoJsonProperties>,
@@ -155,7 +156,8 @@ export function stringifyGeoJson(
   data: EditorFeatureCollection,
   options: { coordSys?: CoordSysId } = {},
 ): string {
-  const payload: EditorFeatureCollection = { ...data }
+  // 导出前统一坐标小数位，避免地图编辑/坐标转换产生长短不一的浮点
+  const payload: EditorFeatureCollection = roundCollection({ ...data })
   const coordSys = options.coordSys ?? data.coordSys
   if (coordSys) payload.coordSys = coordSys
   else delete payload.coordSys

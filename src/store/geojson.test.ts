@@ -49,6 +49,26 @@ describe('GeoJSON 解析与校验', () => {
     expect(JSON.parse(exported).coordSys).toBe('GCJ-02')
   })
 
+  it('导出时统一经纬度小数位为最多 6 位', () => {
+    const exported = stringifyGeoJson({
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          id: 'p1',
+          properties: {},
+          geometry: {
+            type: 'Point',
+            coordinates: [121.53779775852013, 29.83242362981096],
+          },
+        },
+      ],
+    })
+    expect(JSON.parse(exported).features[0].geometry.coordinates).toEqual([
+      121.537798, 29.832424,
+    ])
+  })
+
   it('拒绝错误的根类型和几何结构', () => {
     expect(parseGeoJsonText('{"type":"Point","coordinates":[0,0]}')).toEqual({
       ok: false,

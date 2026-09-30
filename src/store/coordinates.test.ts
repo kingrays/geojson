@@ -1,6 +1,11 @@
 import type { Point } from 'geojson'
 import { describe, expect, it, beforeEach, vi } from 'vitest'
-import { transformCollection, transformCoordinate } from './coordinates'
+import {
+  roundCollection,
+  roundCoordinateValue,
+  transformCollection,
+  transformCoordinate,
+} from './coordinates'
 
 describe('坐标转换', () => {
   it('同坐标系时不改变坐标', () => {
@@ -36,6 +41,43 @@ describe('坐标转换', () => {
     expect(converted.features[0].properties?.name).toBe('测试点')
     const geometry = converted.features[0].geometry as Point
     expect(geometry.coordinates).not.toEqual([116.404, 39.915])
+  })
+})
+
+describe('坐标小数位规范化', () => {
+  it('将过长浮点四舍五入到 6 位', () => {
+    expect(roundCoordinateValue(121.53779775852013)).toBe(121.537798)
+    expect(roundCoordinateValue(29.83242362981096)).toBe(29.832424)
+  })
+
+  it('规范化 FeatureCollection 内全部坐标', () => {
+    const rounded = roundCollection({
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          id: 'poly-1',
+          properties: {},
+          geometry: {
+            type: 'Polygon',
+            coordinates: [
+              [
+                [121.53779775852013, 29.83242362981096],
+                [121.54, 29.83],
+                [121.53779775852013, 29.83242362981096],
+              ],
+            ],
+          },
+        },
+      ],
+    })
+    const ring = (
+      rounded.features[0].geometry as {
+        coordinates: number[][][]
+      }
+    ).coordinates[0]
+    expect(ring[0]).toEqual([121.537798, 29.832424])
+    expect(ring[1]).toEqual([121.54, 29.83])
   })
 })
 

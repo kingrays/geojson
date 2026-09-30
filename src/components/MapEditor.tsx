@@ -101,7 +101,6 @@ function DrawingController({
   dataCrs,
   targetPlatform,
   onCreate,
-  onEdit,
   onRemove,
   onSuggestTargetPlatform,
 }: {
@@ -110,7 +109,6 @@ function DrawingController({
   dataCrs: CoordSysId
   targetPlatform: TargetPlatform
   onCreate: MapEditorProps['onCreate']
-  onEdit: MapEditorProps['onEdit']
   onRemove: MapEditorProps['onRemove']
   onSuggestTargetPlatform: () => void
 }) {
@@ -135,6 +133,7 @@ function DrawingController({
       rotateMode: false,
     })
 
+    // pm:create / pm:remove 会打到 map；pm:update（点「完成」）只打在图层上，见 onEachFeature
     const handleCreate = (event: GeomanLayerEvent) => {
       if (
         !hasSuggestedRef.current &&
@@ -151,26 +150,16 @@ function DrawingController({
       onCreate(transformFeature(feature, basemapCrs, dataCrs))
     }
 
-    const handleEdit = (event: GeomanLayerEvent) => {
-      const id = event.layer.feature?.id
-      const feature = event.layer.toGeoJSON?.()
-      if (id && feature) {
-        onEdit(String(id), transformFeature(feature, basemapCrs, dataCrs))
-      }
-    }
-
     const handleRemove = (event: GeomanLayerEvent) => {
       const id = event.layer.feature?.id
       if (id) onRemove(String(id))
     }
 
     map.on('pm:create', handleCreate)
-    map.on('pm:edit', handleEdit)
     map.on('pm:remove', handleRemove)
 
     return () => {
       map.off('pm:create', handleCreate)
-      map.off('pm:edit', handleEdit)
       map.off('pm:remove', handleRemove)
       map.pm.removeControls()
     }
@@ -181,7 +170,6 @@ function DrawingController({
     dataCrs,
     targetPlatform,
     onCreate,
-    onEdit,
     onRemove,
     onSuggestTargetPlatform,
   ])
@@ -219,7 +207,7 @@ function getMapHint(
   if (dataCrs !== basemapCrs) {
     return `当前按 ${basemapLabel} 预览，导出仍为 ${targetLabel} 坐标`
   }
-  return '使用右侧工具绘制、拖动、编辑或删除要素'
+  return '使用右侧工具绘制、编辑或拖拽；改完后点「完成」再写入数据'
 }
 
 export function MapEditor(props: MapEditorProps) {
@@ -246,6 +234,16 @@ export function MapEditor(props: MapEditorProps) {
   const basemapCrs = basemap.basemapCrs
   const target = getTargetPlatform(targetPlatform)
 
+  // Geoman 的 pm:update 只在图层上触发；用 ref 避免 onEachFeature 闭包过期
+  const onEditRef = useRef(onEdit)
+  const basemapCrsRef = useRef(basemapCrs)
+  const dataCrsRef = useRef(dataCrs)
+  useEffect(() => {
+    onEditRef.current = onEdit
+    basemapCrsRef.current = basemapCrs
+    dataCrsRef.current = dataCrs
+  }, [onEdit, basemapCrs, dataCrs])
+
   const displayData = useMemo(
     () =>
       dataCrs === basemapCrs
@@ -271,6 +269,31 @@ export function MapEditor(props: MapEditorProps) {
     basemap.label,
     target.label,
   )
+
+  /**
+   * 仅在点击工具栏「完成」退出编辑/拖拽模式时写回状态。
+   * Geoman：编辑过程触发 pm:edit；有改动并 disable 时触发 pm:update。
+   */
+  const bindLayerEditSync = (
+    feature: Feature<Geometry, GeoJsonProperties>,
+    layer: Layer,
+  ) => {
+    const editable = layer as EditableLayer
+    const syncGeometry = () => {
+      const id = editable.feature?.id ?? feature.id
+      const nextFeature = editable.toGeoJSON?.()
+      if (id == null || !nextFeature) return
+      onEditRef.current(
+        String(id),
+        transformFeature(
+          nextFeature,
+          basemapCrsRef.current,
+          dataCrsRef.current,
+        ),
+      )
+    }
+    layer.on('pm:update', syncGeometry)
+  }
 
   return (
     <section className="map-pane" aria-label="GeoJSON 地图">
@@ -318,6 +341,7 @@ export function MapEditor(props: MapEditorProps) {
               L.DomEvent.stopPropagation(event)
               onSelect(String(feature.id))
             })
+            bindLayerEditSync(feature, layer)
             const name = feature.properties?.name
             if (name) layer.bindTooltip(String(name))
           }}
@@ -329,7 +353,6 @@ export function MapEditor(props: MapEditorProps) {
           dataCrs={dataCrs}
           targetPlatform={targetPlatform}
           onCreate={onCreate}
-          onEdit={onEdit}
           onRemove={onRemove}
           onSuggestTargetPlatform={onSuggestTargetPlatform}
         />
