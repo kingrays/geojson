@@ -2,8 +2,8 @@ import 'leaflet'
 
 declare module 'leaflet' {
   namespace CRS {
-    // proj4leaflet + chinatmsproviders 注入的百度 CRS
-    const Baidu: CRS
+    // proj4leaflet + chinatmsproviders 注入的百度 CRS（可重建以扩展缩放级别）
+    let Baidu: CRS
   }
 
   namespace tileLayer {

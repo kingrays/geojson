@@ -35,8 +35,7 @@ const MAP_DEFAULT_ZOOM = 16
 /** 适配全部要素时允许更近，避免小范围图形被压在 17 级 */
 const FIT_BOUNDS_MAX_ZOOM = 20
 const OSM_MAX_NATIVE_ZOOM = 19
-/** 百度 CRS 的 resolutions 只有 0–18 级，不能超过 */
-const BAIDU_MAX_ZOOM = 18
+/** 国内底图原生瓦片最高 18 级；更高缩放由 Leaflet 超采样 */
 const CHINA_MAX_NATIVE_ZOOM = 18
 
 type EditableLayer = Layer & {
@@ -273,8 +272,6 @@ export function MapEditor(props: MapEditorProps) {
     target.label,
   )
 
-  const mapMaxZoom = basemapCrs === 'BD-09' ? BAIDU_MAX_ZOOM : MAP_MAX_ZOOM
-
   return (
     <section className="map-pane" aria-label="GeoJSON 地图">
       <MapContainer
@@ -283,7 +280,7 @@ export function MapEditor(props: MapEditorProps) {
         center={[31.236, 121.482]}
         zoom={MAP_DEFAULT_ZOOM}
         minZoom={MAP_MIN_ZOOM}
-        maxZoom={mapMaxZoom}
+        maxZoom={MAP_MAX_ZOOM}
         className="map"
         zoomControl
       >
@@ -292,7 +289,7 @@ export function MapEditor(props: MapEditorProps) {
             attribution={basemap.attribution ?? ''}
             url={basemap.url}
             maxNativeZoom={OSM_MAX_NATIVE_ZOOM}
-            maxZoom={mapMaxZoom}
+            maxZoom={MAP_MAX_ZOOM}
           />
         ) : (
           basemap.layers &&
@@ -302,7 +299,7 @@ export function MapEditor(props: MapEditorProps) {
               layers={basemap.layers}
               apiKey={chinaKey}
               maxNativeZoom={CHINA_MAX_NATIVE_ZOOM}
-              maxZoom={mapMaxZoom}
+              maxZoom={MAP_MAX_ZOOM}
             />
           )
         )}

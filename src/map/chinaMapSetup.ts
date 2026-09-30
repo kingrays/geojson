@@ -28,6 +28,48 @@ const chinaProviders = (
 ).ChinaProvider.providers
 chinaProviders.Baidu = { ...BAIDU_HTTPS_PROVIDERS }
 
+/** 与 MapEditor MAP_MAX_ZOOM 对齐；原生瓦片仍到 18，更高等级靠超采样 */
+const BAIDU_CRS_MAX_ZOOM = 22
+
+/** 按百度官方公式生成 resolutions：zoom z → 2^(18-z) */
+function buildBaiduResolutions(maxZoom: number): number[] {
+  const resolutions: number[] = []
+  for (let zoom = 0; zoom <= maxZoom; zoom += 1) {
+    resolutions[zoom] = 2 ** (18 - zoom)
+  }
+  return resolutions
+}
+
+/**
+ * chinatmsproviders 默认百度 CRS 仅到 18 级，这里重建以支持更高缩放。
+ * 瓦片 maxNativeZoom 仍为 18，19–22 由 Leaflet 拉伸显示。
+ */
+const leafletWithProj = L as typeof L & {
+  Proj?: {
+    CRS: new (
+      code: string,
+      def: string,
+      options: {
+        resolutions: number[]
+        origin: [number, number]
+        bounds: L.Bounds
+      },
+    ) => L.CRS
+  }
+}
+
+if (leafletWithProj.Proj) {
+  L.CRS.Baidu = new leafletWithProj.Proj.CRS(
+    'EPSG:900913',
+    '+proj=merc +a=6378206 +b=6356584.314245179 +lat_ts=0.0 +lon_0=0.0 +x_0=0 +y_0=0 +k=1.0 +units=m +nadgrids=@null +wktext  +no_defs',
+    {
+      resolutions: buildBaiduResolutions(BAIDU_CRS_MAX_ZOOM),
+      origin: [0, 0],
+      bounds: L.bounds([20037508.342789244, 0], [0, 20037508.342789244]),
+    },
+  )
+}
+
 /** 百度底图需专用 CRS（proj4leaflet），其他底图使用 Web Mercator */
 export function getMapCrs(basemapCrs: CoordSysId): L.CRS {
   if (basemapCrs === 'BD-09' && L.CRS.Baidu) {
